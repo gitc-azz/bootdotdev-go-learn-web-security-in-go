@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+	"strings"
+	"unicode"
 
 	"github.com/bootdotdev/learn-web-security/internal/database/dbgen"
 )
@@ -20,6 +22,8 @@ const defaultSessionTTL = 30 * 24 * time.Hour
 var ErrEmailExists = errors.New("an account already exists for that email")
 
 func NormalizeEmail(email string) string {
+	email = strings.TrimFunc(email, unicode.IsSpace)
+	email = strings.ToLower(email)
 	return email
 }
 
