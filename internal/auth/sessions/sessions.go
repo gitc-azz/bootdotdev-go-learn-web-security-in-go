@@ -49,19 +49,28 @@ func HasRecentAuthentication(current accounts.CurrentSession, now time.Time) boo
 	return !authenticatedAt.After(now) && !authenticatedAt.Before(now.Add(-recentAuthenticationWindow))
 }
 
+func secureCookie(c *http.Cookie) *http.Cookie {
+	c.Secure = true
+	c.HttpOnly = true
+	c.SameSite = http.SameSiteLaxMode
+
+	return c
+}
+
 func SetCookie(responseWriter http.ResponseWriter, session accounts.Session) {
-	http.SetCookie(responseWriter, &http.Cookie{
+	http.SetCookie(responseWriter, secureCookie(&http.Cookie{
 		Name:  CookieName,
 		Value: session.Token,
 		Path:  "/",
-	})
+		Expires: session.ExpiresAt,
+	}))
 }
 
 func ClearCookie(responseWriter http.ResponseWriter) {
-	http.SetCookie(responseWriter, &http.Cookie{
+	http.SetCookie(responseWriter, secureCookie(&http.Cookie{
 		Name:    CookieName,
 		Path:    "/",
 		Expires: time.Unix(0, 0),
 		MaxAge:  -1,
-	})
+	}))
 }
