@@ -2,7 +2,10 @@ package passwordreset
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -10,8 +13,7 @@ import (
 	"github.com/bootdotdev/learn-web-security/internal/database/dbgen"
 )
 
-const tokenTTL = 30 * 24 * time.Hour
-
+const tokenTTL = 15 * time.Minute
 type Token struct {
 	ID        int64
 	UserID    int64
@@ -32,7 +34,7 @@ func NewStore(database *sql.DB) *Store {
 
 func (store *Store) Create(ctx context.Context, userID int64) (Token, error) {
 	now := store.now().UTC()
-	value := fmt.Sprintf("reset-%d-%d", userID, now.UnixNano())
+	value := randomString32()
 	expiresAt := now.Add(tokenTTL)
 	if err := store.queries.CreatePasswordResetToken(ctx, dbgen.CreatePasswordResetTokenParams{
 		UserID:    userID,
@@ -74,6 +76,7 @@ func (store *Store) ResetPassword(ctx context.Context, value, passwordHash strin
 		return false, fmt.Errorf("begin password reset: %w", err)
 	}
 	defer transaction.Rollback()
+
 	queries := store.queries.WithTx(transaction)
 	userID, err := queries.ConsumePasswordResetToken(ctx, dbgen.ConsumePasswordResetTokenParams{
 		Now:       &now,
@@ -88,6 +91,7 @@ func (store *Store) ResetPassword(ctx context.Context, value, passwordHash strin
 	if err != nil {
 		return false, fmt.Errorf("consume password reset token: %w", err)
 	}
+	
 	result, err := queries.ResetUserPasswordHash(ctx, dbgen.ResetUserPasswordHashParams{
 		PasswordHash: passwordHash,
 		Now:          now,
@@ -103,23 +107,35 @@ func (store *Store) ResetPassword(ctx context.Context, value, passwordHash strin
 	if rowsAffected != 1 {
 		return false, errors.New("password reset user was not found")
 	}
+	
 	if err := queries.ConsumeRemainingPasswordResetTokens(ctx, dbgen.ConsumeRemainingPasswordResetTokensParams{Now: &now, UserID: userID}); err != nil {
 		return false, fmt.Errorf("consume remaining password reset tokens: %w", err)
 	}
+	
 	if err := queries.RevokeUserSessions(ctx, dbgen.RevokeUserSessionsParams{Now: &now, UserID: userID}); err != nil {
 		return false, fmt.Errorf("revoke user sessions: %w", err)
 	}
+	
 	if err := queries.DeleteTOTPLoginChallengesForUser(ctx, userID); err != nil {
 		return false, fmt.Errorf("delete TOTP login challenges: %w", err)
 	}
+	
 	if err := transaction.Commit(); err != nil {
 		return false, fmt.Errorf("commit password reset: %w", err)
 	}
+
 	return true, nil
 }
 
+func randomString32() string {
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
 func hashToken(value string) string {
-	return value
+	ret := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(ret[:])
 }
 
 func formatTimestamp(timestamp time.Time) string {

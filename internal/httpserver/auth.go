@@ -239,6 +239,10 @@ func (handler *authHandler) Logout(responseWriter http.ResponseWriter, request *
 		return
 	}
 	sessions.ClearCookie(responseWriter)
+	cSession, ok, _ := sessions.Current(request, handler.accounts)
+	if ok {
+		handler.accounts.RevokeSession(request.Context(), cSession.Session.Token)
+	}
 	if challengeToken != "" {
 		clearTOTPLoginChallengeCookie(responseWriter)
 	}

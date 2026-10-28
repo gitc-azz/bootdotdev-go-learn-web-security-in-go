@@ -394,6 +394,7 @@ func (handler *authHandler) ResetPassword(responseWriter http.ResponseWriter, re
 		}
 		return
 	}
+
 	if err := handler.renderPasswordReset(responseWriter, http.StatusOK, "", "", user.Email); err != nil {
 		handler.internalError(responseWriter, request, err)
 	}
