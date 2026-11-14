@@ -10,6 +10,7 @@ import (
 
 	"github.com/bootdotdev/learn-web-security/internal/accounts"
 	"github.com/bootdotdev/learn-web-security/internal/auth/mfa"
+	"github.com/bootdotdev/learn-web-security/internal/auth/passwords"
 	"github.com/bootdotdev/learn-web-security/internal/auth/sessions"
 	"github.com/bootdotdev/learn-web-security/internal/httpx"
 	"github.com/bootdotdev/learn-web-security/internal/logging"
@@ -63,8 +64,8 @@ func (handler *Handler) Page(responseWriter http.ResponseWriter, request *http.R
 	}
 
 	handler.logger.Event("account_accessed", map[string]any{
-		"userId": current.User.ID,
-		"email": current.User.Email,
+		"userId":    current.User.ID,
+		"email":     current.User.Email,
 		"expiresAt": current.Session.ExpiresAt,
 	})
 
@@ -90,12 +91,20 @@ func (handler *Handler) UpdateEmail(responseWriter http.ResponseWriter, request 
 		}
 		return
 	}
+
+	currentPassword, err := httpx.FormValue(request, "currentPassword")
+	if err != nil || currentPassword == "" || !passwords.Verify(currentPassword, current.User.PasswordHash) {
+		handler.renderPage(responseWriter, 403, current, "Re-enter your current password to change your email.")
+		return
+	}
+
 	existingUser, found, err := handler.accountStore.FindUserByEmail(request.Context(), email)
 	if err != nil {
 		handler.internalError(responseWriter, request, err)
 		return
 	}
 	if found && existingUser.ID != current.User.ID {
+
 		if err := handler.renderPage(responseWriter, http.StatusConflict, current, "Email is already in use."); err != nil {
 			handler.internalError(responseWriter, request, err)
 		}
